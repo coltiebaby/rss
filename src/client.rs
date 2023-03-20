@@ -46,6 +46,10 @@ impl RiotClient {
         Url::parse(&format!("https://127.0.0.1:{port}", port=self.port)).unwrap()
     }
 
+    pub fn swagger_url(&self) -> Url {
+        Url::parse(&format!("https://@127.0.0.1:{port}/swagger/v3/openapi.json", port=self.port)).unwrap()
+    }
+
     // let client = Client::new(installed_at).expect("failed to look at lockfile");
     // let (tx, rx) = mpsc::channel::<String>();
 
