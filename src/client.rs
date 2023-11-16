@@ -1,128 +1,77 @@
-use std::process::{Command, Stdio};
 use http_auth_basic::Credentials;
-use reqwest::{Url, header};
+use reqwest::header;
+use std::process;
 
-#[derive(Debug, Default)]
-pub struct RiotClient {
-    pub token: String,
-    pub port: String,
-    pub client: reqwest::Client,
+#[derive(Debug)]
+pub struct Client {
+    pub(crate) token: String,
+    pub(crate) port: String,
 }
 
-impl RiotClient {
-    pub fn new() -> RiotClient {
-        let mut rc = RiotClient { ..Default::default() };
+impl Client {
+    pub fn new() -> super::LCUResult<Self> {
+        let processes = from_process("RiotClientUx").ok_or(super::LCUError::AppNotRunning)?;
+        let process = processes.get(0).ok_or(super::LCUError::AppNotRunning)?;
 
-        let wanted: Vec<String> = vec![
-            "--app-port".to_string(),
-            "--remoting-auth-token".to_string(),
-        ];
+        Self::from_str(process)
+    }
 
-        let process = match from_process("RiotClientUx".to_string(), wanted) {
-            Some(x) => x,
-            None => {
-                return rc;
-            }
-        };
+    fn from_str(value: &str) -> super::LCUResult<Client> {
+        let re = regex::Regex::new(r"--app-port=([0-9]*).*--remoting-auth-token=([\w-]*)").unwrap();
+        let caps = re.captures(value).unwrap();
+        let port: String = caps.get(1).unwrap().as_str().to_string();
+        let token: String = caps.get(2).unwrap().as_str().to_string();
 
-        if process.len() != 2 {
-            return rc;
-        }
+        Ok(Client { token, port })
+    }
 
-        rc.port = process[0].clone();
-        rc.token = process[1].clone();
-
-        let credentials = Credentials::new("riot", &rc.token);
-        let credentials = credentials.as_http_header();
+    pub fn to_reqwest(&self) -> super::LCUResult<reqwest::Client> {
+        let auth = Credentials::new("riot", &self.token);
+        let auth = auth.as_http_header();
+        let auth = header::HeaderValue::from_str(&auth)
+            .map_err(|e| super::LCUError::HttpClientError(e.to_string()))?;
 
         let mut headers = header::HeaderMap::new();
-        headers.insert("Authorization", header::HeaderValue::from_str(&credentials).unwrap());
-        rc.client = reqwest::Client::builder().default_headers(headers).danger_accept_invalid_certs(true).build().unwrap();
+        headers.insert("Authorization", auth);
 
-        rc
+        reqwest::Client::builder()
+            .default_headers(headers)
+            .danger_accept_invalid_certs(true)
+            .build()
+            .map_err(|e| super::LCUError::HttpClientError(e.to_string()))
     }
-
-    pub fn get_url_builder(&self) -> Url {
-        Url::parse(&format!("https://127.0.0.1:{port}", port=self.port)).unwrap()
-    }
-
-    pub fn swagger_url(&self) -> Url {
-        Url::parse(&format!("https://@127.0.0.1:{port}/swagger/v3/openapi.json", port=self.port)).unwrap()
-    }
-
-    // let client = Client::new(installed_at).expect("failed to look at lockfile");
-    // let (tx, rx) = mpsc::channel::<String>();
-
-    // std::thread::spawn(move || client.watcher(tx));
-    // let received = rx.recv().unwrap();
-    // println!("Got: {}", received);
-    // fn watcher(self, tx: mpsc::Sender<String>) {
-    //     let dur = std::time::Duration::from_secs(1);
-
-    //     let installed = path::Path::new(&self.installed_at);
-    //     let lockfile = installed.join("lockfile");
-
-    //     while lockfile.is_file() {
-    //         std::thread::sleep(dur);
-    //     }
-
-    //     tx.send("no file".to_string());
-    // }
 }
 
-fn from_process(process: String, need: Vec<String>) -> Option<Vec<String>> {
-    // Runs the command below. -o command only shows that colum.
-    let ps = Command::new("ps").arg("x").arg("-A").arg("-o args").stdout(Stdio::piped()).spawn().unwrap();
-    let mut grep = Command::new("grep");
-    grep.arg(process);
-    grep.stdin(ps.stdout.unwrap());
+fn from_process(process: &str) -> Option<Vec<String>> {
+    let ps = process::Command::new("ps")
+        .args(["x", "-A", "-o args"])
+        .stdout(process::Stdio::piped())
+        .spawn()
+        .ok()?;
 
-    let output = String::from_utf8(grep.output().unwrap().stdout).unwrap();
+    let mut grep = process::Command::new("grep");
+    grep.arg(process).stdin(ps.stdout?);
+
+    let output = String::from_utf8(grep.output().ok()?.stdout).ok()?;
     let lines = output.lines();
 
-    let mut results: Vec<String> = Vec::new();
-    'liner: for line in lines {
-        // Skip the line
-        for n in &need {
-            if !line.contains(n.as_str()) {
-                continue 'liner;
-            }
-        }
+    let lines: Vec<String> = lines
+        .filter(|x| x.contains("--app-port") && x.contains("--remoting-auth-token"))
+        .map(String::from)
+        .collect();
 
-        println!("{:?}", line);
-
-        let spaced = line.split(" --").into_iter();
-
-        for space in spaced {
-            for n in need.iter() {
-                let mut lf = n.clone();
-                lf.push('=');
-
-                let lf_str = lf.as_str().strip_prefix("--")?;
-                if space.contains(lf_str) {
-                    let result = space.strip_prefix(lf_str)?;
-                    results.push(result.to_string());
-                }
-
-            }
-        }
-
-        break;
-    }
-
-    if results.is_empty() {
-        return None
-    }
-
-    Some(results)
+    Some(lines)
 }
 
-// GET /swagger/v1/api-docs
-// GET /swagger/v1/api-docs/{api}
-// GET /swagger/v2/swagger.json
-// GET /swagger/v3/openapi.json
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-// struct RequestBuilder {
-//     plugin: String,
-//     version: String,
-// }
+    #[test]
+    fn client_from_string() {
+        let example = "/Users/Shared/Riot Games/Riot Client.app/Contents/Frameworks/RiotClient.app/Contents/MacOS/RiotClientUx --app-port=12345 --remoting-auth-token=token --app-pid=app-id --log-dir=/Users/crobertson/Library/Logs/Riot Games/Riot Client --user-data-root=/Users/crobertson/Library/Application Support/Riot Games/Riot Client --app-root=/Users/Shared/Riot Games/Riot Client.app --crashpad-environment=KeystoneFoundationLiveMac";
+
+        let client = Client::from_str(example).expect("usable client");
+        assert_eq!(client.port, "12345".to_string())
+    }
+}
