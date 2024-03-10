@@ -1,13 +1,91 @@
-use futures_util::StreamExt;
+use futures_util::{StreamExt, SinkExt};
 use futures_util::stream::{SplitSink, SplitStream};
 use tokio_tungstenite::WebSocketStream;
 use tokio_native_tls::TlsStream;
 use tokio::net::TcpStream;
 use tungstenite::Message;
 
-pub struct Connected {
-    read: SplitStream<WebSocketStream<TlsStream<TcpStream>>>,
-    write: SplitSink<WebSocketStream<TlsStream<TcpStream>>, Message>,
+use crate::core;
+
+pub type Connected = WebSocketStream<TlsStream<TcpStream>>;
+
+pub struct Speaker {
+    finish: tokio::sync::broadcast::Sender<bool>,
+
+    reader: flume::Receiver<core::Incoming>,
+    writer: flume::Sender<String>,
+    handles: Vec<tokio::task::JoinHandle<()>>,
+}
+
+impl Speaker {
+    pub async fn send(&self, msg: String) {
+        self.writer.send_async(msg).await;
+    }
+
+    fn try_send(&self, msg: String){
+        self.writer.try_send(msg);
+    }
+}
+
+impl Drop for Speaker {
+    fn drop(&mut self) {
+        let msg = (6, "OnJsonApiEvent");
+        if let Ok(msg) = serde_json::to_string(&msg) {
+            self.try_send(msg)
+        };
+
+        self.finish.send(true);
+    }
+}
+
+pub async fn subscribe(socket: Connected) -> Speaker {
+    let (cleanup_tx, cleanup_rx1) = tokio::sync::broadcast::channel(1);
+    let cleanup_rx2 = cleanup_tx.subscribe();
+
+    let (reader_tx, reader_rx) = flume::unbounded();
+    let (writer_tx, writer_rx) = flume::unbounded();
+
+    let (write, read) = socket.split();
+
+    let read_handle = tokio::task::spawn(read_from(cleanup_rx1, reader_tx, read));
+    let write_handle = tokio::task::spawn(write_to(cleanup_rx2, write, writer_rx));
+
+    Speaker {
+        finish: cleanup_tx,
+        reader: reader_rx,
+        writer: writer_tx,
+        handles: vec![read_handle, write_handle],
+    }
+}
+
+async fn read_from(mut end: tokio::sync::broadcast::Receiver<bool>, tx: flume::Sender<core::Incoming>, mut read: SplitStream<Connected>) {
+    loop {
+        tokio::select! {
+            Some(Ok(msg)) = read.next() => {
+                let msg = msg.to_string();
+                let msg = msg.trim();
+
+                if msg.is_empty() {
+                    continue;
+                }
+                let incoming: core::Incoming = serde_json::from_str(&msg).unwrap();
+                println!("{incoming:?}");
+                tx.send_async(incoming).await;
+            },
+            _ = end.recv() => { break },
+        };
+    }
+}
+
+async fn write_to(mut end: tokio::sync::broadcast::Receiver<bool>, mut tx: SplitSink<Connected, Message>, read: flume::Receiver<String>) {
+    loop {
+        tokio::select! {
+            Ok(msg) = read.recv_async() => {
+                tx.send(Message::Text(msg)).await;
+            },
+            _ = end.recv() => { break },
+        };
+    }
 }
 
 pub struct Connector {
@@ -33,11 +111,9 @@ impl Connector {
         let stream = tokio::net::TcpStream::connect(&combo).await.unwrap();
         let stream = self.tls.connect(&combo, stream).await.unwrap();
 
-        let (stream, _) = tokio_tungstenite::client_async(req, stream).await.expect("Failed to connect");
+        let (socket, _) = tokio_tungstenite::client_async(req, stream).await.expect("Failed to connect");
 
-        let (write, read) = stream.split();
-
-        Connected { write, read }
+        socket
     }
 }
 

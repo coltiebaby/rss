@@ -21,7 +21,7 @@ pub enum Event {
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct Message {
+pub struct Message {
     data: serde_json::Value,
     event_type: EventType,
     uri: String,
