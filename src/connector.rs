@@ -1,36 +1,43 @@
-use crate::{Error, LCUResult};
+use futures_util::StreamExt;
+use futures_util::stream::{SplitSink, SplitStream};
+use tokio_tungstenite::WebSocketStream;
+use tokio_native_tls::TlsStream;
+use tokio::net::TcpStream;
+use tungstenite::Message;
+
+pub struct Connected {
+    read: SplitStream<WebSocketStream<TlsStream<TcpStream>>>,
+    write: SplitSink<WebSocketStream<TlsStream<TcpStream>>, Message>,
+}
 
 pub struct Connector {
-    socket: tungstenite::WebSocket<native_tls::TlsStream<std::net::TcpStream>>,
+    tls: tokio_native_tls::TlsConnector,
 }
 
 impl Connector {
-    pub fn spawn(self) -> LCUResult<(flume::Receiver<crate::core::Incoming>, tokio::task::JoinHandle<()>)> {
-        let mut socket = self.socket;
-
-        let (tx, rx) = flume::unbounded();
-
-        let handle = tokio::task::spawn(async move {
-            socket.write(tungstenite::Message::Binary("[5, \"OnJsonApiEvent\"]".into())).unwrap();
-            loop {
-                let msg = socket.read().expect("Error reading message");
-                let msg = msg.to_string();
-                let msg = msg.trim();
-
-                if msg.is_empty() {
-                    continue;
-                }
-
-                let incoming: crate::core::Incoming = serde_json::from_str(msg).expect("should have a new message");
-                tx.send(incoming).expect("failed to send message");
-            }
-        });
-
-        Ok((rx, handle))
+    fn new(tls: tokio_native_tls::TlsConnector) -> Self {
+        Self { tls }
     }
 
     pub fn builder() -> ConnectorBuilder {
         ConnectorBuilder::default()
+    }
+
+    pub async fn connect(&self, req: tungstenite::http::Request<()>) -> Connected {
+        let uri = req.uri();
+
+        let host = uri.host().unwrap();
+        let port = uri.port().unwrap();
+        let combo = format!("{host}:{port}");
+
+        let stream = tokio::net::TcpStream::connect(&combo).await.unwrap();
+        let stream = self.tls.connect(&combo, stream).await.unwrap();
+
+        let (stream, _) = tokio_tungstenite::client_async(req, stream).await.expect("Failed to connect");
+
+        let (write, read) = stream.split();
+
+        Connected { write, read }
     }
 }
 
@@ -40,13 +47,14 @@ pub struct ConnectorBuilder {
 }
 
 impl ConnectorBuilder {
-    pub fn connect(self, req: tungstenite::http::Request<()>) -> LCUResult<Connector> {
-        let uri = req.uri();
+    pub fn insecure(self, value: bool) -> Self {
+        Self {
+            insecure: value,
+            ..self
+        }
+    }
 
-        let host = uri.host().ok_or(Error::Uri)?;
-        let port = uri.port().ok_or(Error::Uri)?;
-        let combo = format!("{host}:{port}");
-
+    pub fn build(self) -> Connector {
         let mut connector = native_tls::TlsConnector::builder();
 
         if self.insecure {
@@ -56,20 +64,9 @@ impl ConnectorBuilder {
             unimplemented!();
         }
 
-        let connector = connector.build().map_err(|e| Error::Websocket(e.to_string()))?;
+        let connector = connector.build().unwrap();
+        let tls = tokio_native_tls::TlsConnector::from(connector);
 
-        // Do the connection
-        let stream = std::net::TcpStream::connect(&combo).map_err(|e| Error::Websocket(e.to_string()))?;
-        let stream = connector.connect(&combo, stream).map_err(|e| Error::Websocket(e.to_string()))?;
-        let (socket, _) = tungstenite::client(req, stream).map_err(|e| Error::Websocket(e.to_string()))?;
-
-        Ok(Connector { socket })
-    }
-
-    pub fn insecure(self, value: bool) -> Self {
-        Self {
-            insecure: value,
-            ..self
-        }
+        Connector { tls }
     }
 }
