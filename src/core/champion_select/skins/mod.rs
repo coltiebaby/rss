@@ -52,3 +52,12 @@ pub struct Selected {
     pub show_skin_selector: bool,
     pub skin_selection_disabled: bool,
 }
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Select {
+    pub selected_skin_id: i64,
+    pub spell_1_id: i64,
+    pub spell_2_id: i64,
+    pub ward_skin_id: i64,
+}
