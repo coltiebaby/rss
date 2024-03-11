@@ -1,17 +1,11 @@
 [package]
-name = "lcu"
+name = "rss"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-native-tls = "0.2"
+league-client = { path = "../league-client" }
+rand = "0.8.5"
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
-tokio = { version = "1", features = ["full"] }
-thiserror = { version = "1" }
-tungstenite = { version = "*", features = ["native-tls"] }
-regex = {version = "1" }
-base64 = "0.22.0"
-reqwest = { version = "0.11.25", features = ["stream"] }
-futures-util = "0.3.30"
-flume = "0.11.0"
+tokio = { version = "1.36.0", features = ["full"] }
