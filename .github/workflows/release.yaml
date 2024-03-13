@@ -1,0 +1,37 @@
+name: Release
+on:
+  push:
+    tags:
+      - '*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: Publish for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: ${{ github.repository }}
+            asset_name: ${{ github.repository }}-{{ github.ref }}-linux-amd64
+          - os: windows-latest
+            artifact_name: ${{ github.repository }}.exe
+            asset_name: ${{ github.repository }}-{{ github.ref }}-windows-amd64
+          - os: macos-latest
+            artifact_name: ${{ github.repository }}
+            asset_name: ${{ github.repository }}-{{ github.ref }}-macos-amd64
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --release --locked
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ github.token }}
+        file: target/release/${{ matrix.artifact_name }}
+        asset_name: ${{ matrix.asset_name }}
+        tag: ${{ github.ref }}
