@@ -607,9 +607,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "league-client"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eff5942d834abf974acb684d8d3920e3f3940e86208c904bc62e003d4beeb2bc"
+checksum = "22dd64547e436d6b26e5a42ca9db0a7593516de1b0175a66252b8e071da806ef"
 dependencies = [
  "base64 0.22.0",
  "flume",
@@ -975,7 +975,7 @@ dependencies = [
 
 [[package]]
 name = "rss"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "env_logger",

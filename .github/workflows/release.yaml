@@ -16,13 +16,13 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact_name: rss
-            asset_name: rss-{{ github.ref }}-linux-amd64
+            asset_name: random-skin-selector
           - os: windows-latest
             artifact_name: rss.exe
-            asset_name: rss-{{ github.ref }}-windows-amd64
+            asset_name: random-skin-selector.exe
           - os: macos-latest
             artifact_name: rss
-            asset_name: rss-{{ github.ref }}-macos-amd64
+            asset_name: random-skin-selector
 
     steps:
     - uses: actions/checkout@v3
