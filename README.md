@@ -1,16 +1,5 @@
-# LCU
+# Random Skin Selector
 
-If you want to make your own wrapper
-
-### Lockfile
-/Applications/League\ of\ Legends.app/Contents/LoL/lockfile
-
-```
-# --install-directory
-# `ps x -o args | grep 'LeagueClientUx'`
-
-$ ps -A | grep "RiotClientUx"
-
-# View swagger
-$ curl -u riot:your-token-here --basic --insecure https://localhost:56970/swagger/v1/api-docs
-```
+Download the release and simply run the application.
+It will wait until it can connect to the game client.
+Once you pick a character it'll pick a random skin after 3 seconds.

@@ -15,14 +15,14 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact_name: ${{ github.repository }}
-            asset_name: ${{ github.repository }}-{{ github.ref }}-linux-amd64
+            artifact_name: rss
+            asset_name: rss-{{ github.ref }}-linux-amd64
           - os: windows-latest
-            artifact_name: ${{ github.repository }}.exe
-            asset_name: ${{ github.repository }}-{{ github.ref }}-windows-amd64
+            artifact_name: rss.exe
+            asset_name: rss-{{ github.ref }}-windows-amd64
           - os: macos-latest
-            artifact_name: ${{ github.repository }}
-            asset_name: ${{ github.repository }}-{{ github.ref }}-macos-amd64
+            artifact_name: rss
+            asset_name: rss-{{ github.ref }}-macos-amd64
 
     steps:
     - uses: actions/checkout@v3
