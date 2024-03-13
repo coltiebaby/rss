@@ -22,7 +22,7 @@ jobs:
             asset_name: random-skin-selector.exe
           - os: macos-latest
             artifact_name: rss
-            asset_name: random-skin-selector
+            asset_name: random-skin-selector-macos
 
     steps:
     - uses: actions/checkout@v3
