@@ -67,9 +67,7 @@ impl Locker {
     }
 
     pub fn select(&self) -> super::core::Select {
-        let select = self.select.clone();
-
-        select
+        self.select.clone()
     }
 
     pub async fn pick_this_skin(&self, select: super::core::Select) -> Result<()> {
@@ -118,10 +116,9 @@ pub async fn select_skin(
         .filter(|x| x.unlocked && !x.disabled)
         .map(|x| x.id)
         .collect();
-    let selected_skin_id = ids
+    let selected_skin_id = *ids
         .choose(&mut rand::thread_rng())
-        .ok_or(anyhow::anyhow!("could not make a random number"))?
-        .clone();
+        .ok_or(anyhow::anyhow!("could not make a random number"))?;
 
     let mut select = state.read().await.select();
     select.selected_skin_id = selected_skin_id;
